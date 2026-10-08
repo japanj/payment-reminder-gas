@@ -72,11 +72,10 @@ function sendDueReminders() {
     const daysLeft = daysBetween_(today, due);
     const dueLabel = Utilities.formatDate(due, tz, 'd MMM yyyy');
     // different bubble will be created based on availability of the amount
-    if (amount){
-      bubbles.push(buildBubbleWithAmount_(name, amount, dueDay, row));
-    }
-    else {
-      bubbles.push(buildBubbleWithoutAmount_(name, dueDay, row));
+    if (amount) {
+      bubbles.push(buildBubbleWithAmount_(name, amount, dueLabel, daysLeft, row));
+    } else {
+      bubbles.push(buildBubbleWithoutAmount_(name, dueLabel, daysLeft, row));
     }
   }
  
@@ -102,7 +101,8 @@ function findDueCycle_(today, dueDay, lastPaid) {
   const paidOn = lastPaid instanceof Date ? startOfDay_(lastPaid) : null;
 
   // Offset -> -1 is last month, 0 is current month, 1 is next month
-  for (const offset of [-1, 0, 1]) {
+  const offsets = paidOn ? [-1, 0, 1] : [0, 1];
+  for (const offset of offsets) {
     const due = dueDateIn_(y, m + offset, dueDay);
     const windowStart = new Date(due.getTime() - REMIND_DAYS_BEFORE * 86400000);
     const prevDue = dueDateIn_(y, m + offset - 1, dueDay); // last cycle's due date
@@ -114,7 +114,18 @@ function findDueCycle_(today, dueDay, lastPaid) {
   return null;
 }
 
-function buildBubbleWithAmount_(name, amount, dueDay, row) {
+function statusFor_(daysLeft) {
+  if (daysLeft > 0) {
+    return { text: `Due in ${daysLeft} day${daysLeft > 1 ? 's' : ''}`, color: '#888888' };
+  }
+  if (daysLeft === 0) {
+    return { text: 'Due today', color: '#E67E22' };
+  }
+  return { text: `Overdue ${-daysLeft} day${daysLeft < -1 ? 's' : ''}`, color: '#E74C3C' };
+}
+
+function buildBubbleWithAmount_(name, amount, dueLabel, daysLeft, row) {
+  const status = statusFor_(daysLeft);
   return {
     type: 'bubble',
     size: 'kilo',
@@ -123,9 +134,10 @@ function buildBubbleWithAmount_(name, amount, dueDay, row) {
       layout: 'vertical',
       spacing: 'sm',
       contents: [
-        { type: 'text', text: name, weight: 'bold', size: 'lg' },
+        { type: 'text', text: name, weight: 'bold', size: 'lg', wrap: true },
         { type: 'text', text: `฿${amount}`, size: 'xl', color: '#1DB446' },
-        { type: 'text', text: `Due day: ${dueDay} of this month`, size: 'sm', color: '#888888' }
+        { type: 'text', text: `Due ${dueLabel}`, size: 'sm', color: '#888888' },
+        { type: 'text', text: status.text, size: 'sm', weight: 'bold', color: status.color }
       ]
     },
     footer: {
@@ -148,7 +160,8 @@ function buildBubbleWithAmount_(name, amount, dueDay, row) {
   };
 }
 
-function buildBubbleWithoutAmount_(name, dueDay, row) {
+function buildBubbleWithoutAmount_(name, dueLabel, daysLeft, row) {
+  const status = statusFor_(daysLeft);
   return {
     type: 'bubble',
     size: 'kilo',
@@ -157,9 +170,10 @@ function buildBubbleWithoutAmount_(name, dueDay, row) {
       layout: 'vertical',
       spacing: 'sm',
       contents: [
-        { type: 'text', text: name, weight: 'bold', size: 'lg' },
-        { type: 'text', text: 'check the amount in their own app', size: 'md', color: '#aaaaaa', style: 'italic', wrap: true},
-        { type: 'text', text: `Due day: ${dueDay} of this month`, size: 'sm', color: '#888888' }
+        { type: 'text', text: name, weight: 'bold', size: 'lg', wrap: true },
+        { type: 'text', text: 'check the amount in their own app', size: 'md', color: '#aaaaaa', style: 'italic', wrap: true },
+        { type: 'text', text: `Due ${dueLabel}`, size: 'sm', color: '#888888' },
+        { type: 'text', text: status.text, size: 'sm', weight: 'bold', color: status.color }
       ]
     },
     footer: {
@@ -180,6 +194,10 @@ function buildBubbleWithoutAmount_(name, dueDay, row) {
       ]
     }
   };
+}
+
+function doGet() {
+  return ContentService.createTextOutput('OK');
 }
 
 /* ============================================================
