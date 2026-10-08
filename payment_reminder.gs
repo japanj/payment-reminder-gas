@@ -1,21 +1,15 @@
 /**
  * LINE Payment Reminder Bot
  * ---------------------------------------------------------
- * Sheet columns (row 1 = header, data starts row 2):
- *   A: Name        e.g. "Netflix"
- *   B: Amount      e.g. 419        (number, no currency symbol needed)
- *   C: Due Day     e.g. 5          (day of month, 1-31)
- *   D: Last Paid   e.g. 2026-08-05 (date, or blank if never paid)
- *
- * Setup (Script Properties — File > Project properties > Script properties):
- *   LINE_CHANNEL_ACCESS_TOKEN  -> from LINE Developers Console > Messaging API
- *   LINE_USER_ID               -> your own LINE userId (see getMyUserId notes below)
- *   SHEET_NAME                 -> defaults to "Payments" if not set (tab in spreadsheet)
+ * Setup properties:
+ *   LINE_CHANNEL_ACCESS_TOKEN  
+ *   LINE_USER_ID               -> LINE userId
+ *   SHEET_NAME                 -> tab in spreadsheet
  *   SHEET_ID                   -> Spreadsheet ID
  *
- * Two entry points:
- *   sendDueReminders()  -> run daily via a time-driven trigger (e.g. 9:00am)
- *   doPost(e)           -> deploy as Web App, set the deployed url as LINE Webhook URL
+ * Functions:
+ *   sendDueReminders()  -> run daily via a time-driven trigger
+ *   doPost(e)           -> function when webhook is triggered
  */
 
 const PROPS = PropertiesService.getScriptProperties();
@@ -35,14 +29,6 @@ function getSheet_() {
   Logger.log('sheetId: ' + sheetId);
   return SpreadsheetApp.openById(sheetId).getSheetByName(sheetName);
 }
-
-// function getSheet_() {
-//   const { sheetId, sheetName } = getConfig_();
-//   const ss = sheetId
-//     ? SpreadsheetApp.openById(sheetId)
-//     : SpreadsheetApp.getActiveSpreadsheet();
-//   return ss.getSheetByName(sheetName);
-// }
  
 /* ============================================================
  *  DATE HELPERS
@@ -52,10 +38,11 @@ function startOfDay_(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
  
-// Due date in a given month; clamps day 29-31 to the month's last day.
-// `month` may be -1 or 12 etc. (JS Date rolls the year over automatically)
+// Get due date in a given month (month starts at 0)
+// month could be -1 or 12 etc. and JS Date rolls the year over automatically
 function dueDateIn_(year, month, dueDay) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
+  // Make sure that the date won't exceed number of days in specific month
   return new Date(year, month, Math.min(Number(dueDay), daysInMonth));
 }
  
@@ -114,6 +101,7 @@ function findDueCycle_(today, dueDay, lastPaid) {
   const m = today.getMonth();
   const paidOn = lastPaid instanceof Date ? startOfDay_(lastPaid) : null;
 
+  // Offset -> -1 is last month, 0 is current month, 1 is next month
   for (const offset of [-1, 0, 1]) {
     const due = dueDateIn_(y, m + offset, dueDay);
     const windowStart = new Date(due.getTime() - REMIND_DAYS_BEFORE * 86400000);
@@ -125,57 +113,6 @@ function findDueCycle_(today, dueDay, lastPaid) {
   }
   return null;
 }
-
-// /* ============================================================
-//  *  DAILY REMINDER
-//  * ============================================================ */
-
-// function sendDueReminders() {
-//   const { token, userId } = getConfig_();
-//   const sheet = getSheet_();
-//   const data = sheet.getDataRange().getValues(); // includes header row
-//   const today = new Date();
-//   const thisYear = today.getFullYear();
-//   const thisMonth = today.getMonth(); // 0-indexed
-//   const todayDay = today.getDate();
-
-//   const bubbles = [];
-//   for (let i = 1; i < data.length; i++) { // skip header
-//     const row = i + 1; // actual sheet row number (skip header)
-//     const [name, amount, dueDay, lastPaid] = data[i];
-
-//     if (!name) continue;
-
-//     const paidThisMonth =
-//       lastPaid instanceof Date &&
-//       lastPaid.getFullYear() === thisYear &&
-//       lastPaid.getMonth() === thisMonth;
-
-//     if (paidThisMonth) continue;          // already paid in specific month
-//     if (todayDay < dueDay) continue;      // not due yet — starts nagging on the due date
-
-//     // different bubble will be created based on availability of the amount
-//     if (amount){
-//       bubbles.push(buildBubbleWithAmount_(name, amount, dueDay, row));
-//     }
-//     else {
-//       bubbles.push(buildBubbleWithoutAmount_(name, dueDay, row));
-//     }
-//   }
-
-//   if (bubbles.length === 0) return; // nothing unpaid/due — stay quiet
-
-//   const flexMessage = {
-//     type: 'flex',
-//     altText: `You have ${bubbles.length} payment(s) due`,
-//     contents: {
-//       type: 'carousel',
-//       contents: bubbles
-//     }
-//   };
-
-//   pushMessage_(token, userId, [flexMessage]);
-// }
 
 function buildBubbleWithAmount_(name, amount, dueDay, row) {
   return {
@@ -246,7 +183,7 @@ function buildBubbleWithoutAmount_(name, dueDay, row) {
 }
 
 /* ============================================================
- *  WEBHOOK — handles "Mark as Paid" button taps
+ *  WEBHOOK — when user clicks "Mark as paid"
  * ============================================================ */
 
 function doPost(e) {
@@ -268,6 +205,7 @@ function doPost(e) {
         }
       }
     } 
+    // Get user ID
     // else if (event.type === 'message' && event.replyToken) {
     //   // Temporary: reply back with your own userId so you can copy it
     //   replyMessage_(token, event.replyToken, [
